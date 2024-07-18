@@ -1,0 +1,260 @@
+<template>
+    <lightning-card>
+        <div class="slds-page-header slds-page-header_record-home">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <lightning-icon icon-name="standard:asset_state_period" alternative-text="Manage State"
+                                title="Manage State"></lightning-icon>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span>Manage Serving States</span>
+                                    </h1>
+                                </div>
+                            </div>
+                        </div>
+                    </div> 
+                </div>
+                <div class="slds-page-header__col-actions">
+                    <div class="slds-page-header__controls">
+                        <div class="slds-page-header__control">
+                            <ul class="slds-button-group-list">
+                                <li>
+                                    <lightning-button label="Refresh" onclick={handleRefresh}></lightning-button>
+                                </li>
+                                <li>
+                                    <lightning-button label="Submit" onclick={handleSubmit}></lightning-button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <lightning-layout>
+            <div class="slds-size_4-of-12 slds-m-left_small">
+                <c-searchable-combobox label="Search States" options={stateOptions} onchange={handleStateSearch}
+                    value="" placeholder="Search States">
+
+                </c-searchable-combobox>
+
+            </div>
+            <template if:true={countiestoShow}>
+                <div class="slds-size_4-of-12 slds-m-left_small">
+                    <c-searchable-combobox label="Search Counties" options={countyOptions} onchange={handleCountySearch}
+                        value="" placeholder="Search Counties">
+
+                    </c-searchable-combobox>
+
+                </div>
+            </template>
+            <template if:true={citiestoshow}>
+                <div class="slds-size_3-of-12 slds-m-left_small">
+                    <c-searchable-combobox label="Search Cities" options={cityOptions} onchange={handleCitySearch}
+                        value="" placeholder="Search Cities">
+
+                    </c-searchable-combobox>
+
+                </div>
+            </template>
+        </lightning-layout>
+
+        <template if:true={isLoading}>
+            <div class="exampleHolder">
+                <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+            </div>
+        </template>
+        <template if:false={isLoading}>
+            <!-- Add search combobox -->
+
+            <!-- STATE TABLE -->
+            <div class="slds-grid">
+                <table
+                    class="slds-table slds-m-left_small slds-table_bordered slds-size_4-of-12 fixed-height-row enclosed-table">
+                    <thead>
+                        <tr>
+                            <th>States</th>
+                            <th>is serving State</th>
+                            <th>is serving all County</th>
+                            <th>View County</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template if:false={filteredstatestoshow}>
+                            <template for:each={states} for:item="state">
+                                <tr key={state.label}>
+                                    <td>{state.MasterLabel}</td>
+                                    <td>
+                                        <lightning-input type="checkbox" title={state.MasterLabel}
+                                            checked={state.checked} data-type="state" onchange={checboxChecked}
+                                            data-id={state.Id}></lightning-input>
+                                    </td>
+                                    <td>
+                                        <lightning-input type="checkbox" data-type="state" data-name={state.MasterLabel}
+                                            checked={state.isAllCountiesChecked} onchange={handleAddAllClick}
+                                            data-id={state.Id}></lightning-input>
+                                    </td>
+                                    <td>
+                                        <lightning-button class="slds-text-align_center" label="View County"
+                                            onclick={handleNextClick} data-type="state"
+                                            data-id={state.Id}></lightning-button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </template>
+
+                        <!-- STATE TABLE SEARCH-->
+                        <template if:true={filteredstatestoshow}>
+                            <template for:each={filteredStates} for:item="state">
+                                <tr key={state.label}>
+                                    <td>{state.MasterLabel}</td>
+                                    <td>
+                                        <lightning-input type="checkbox" title={state.MasterLabel}
+                                            checked={state.checked} data-type="state" onchange={checboxChecked}
+                                            data-id={state.Id}></lightning-input>
+                                    </td>
+                                    <td>
+                                        <lightning-input type="checkbox" data-type="state" name={state.MasterLabel}
+                                            checked={state.isAllCountiesChecked} onchange={handleAddAllClick}
+                                            data-id={state.Id}></lightning-input>
+                                    </td>
+                                    <td>
+                                        <lightning-button class="slds-text-align_center" label="View County"
+                                            onclick={handleNextClick} data-type="state"
+                                            data-id={state.Id}></lightning-button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </template>
+                    </tbody>
+                </table>
+
+<!-- COUNTY TABLE -->
+                <template if:true={countiestoShow}>
+                    <!-- <div class=" slds-grid slds-grid_vertical ">
+                        <! <div class="slds-col ">
+                            <c-searchable-combobox label="Search States" options={stateOptions} onchange={handleStateSearch}
+                                value="" placeholder="Search States">
+                            </c-searchable-combobox>
+                        </div> -->
+                    <!-- </div> -->
+                    <!-- <div class=" slds-grid slds-grid_vertical"> -->
+                    <!-- <div class="slds-col"> -->
+                    <table
+                        class="slds-table slds-m-left_small slds-table_bordered slds-size_4-of-12 fixed-height-row enclosed-table slds-col">
+                        <thead>
+                            <tr>
+                                <th>Counties</th>
+                                <th>is serving County</th>
+                                <th>is serving all Cities</th>
+                                <th>View City</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template if:false={filteredcountiestoshow}>
+                                <template for:each={countylabel} for:item="county">
+                                    <tr key={county.Id}>
+                                        <td>{county.MasterLabel}</td>
+                                        <td>
+                                            <lightning-input type="checkbox" checked={county.checked} data-type="county"
+                                                title={county.MasterLabel} label-hidden={county.MasterLabel} data-statename={county.State__r.Label}
+                                                data-stateid={county.State__c} onchange={checboxChecked}
+                                                data-id={county.Id}></lightning-input>
+                                        </td>
+                                        <td>
+                                            <lightning-input type="checkbox" data-type="county"
+                                                checked={county.isAllCitiesChecked} onchange={handleAddAllCitiesClick}
+                                                title={county.MasterLabel} data-stateid={county.State__c} data-statename={county.State__r.Label} 
+                                                data-id={county.Id}></lightning-input>
+                                        </td>
+                                        <td>
+                                            <lightning-button label="View City" onclick={handleNextClickCities} data-statename={county.State__r.Label}
+                                                data-stateid={county.State__c} data-type="county" data-id={county.Id}>
+                                            </lightning-button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template>
+                            <!-- COUNTY TABLE SEARCH -->
+                            <template if:true={filteredcountiestoshow}>
+                                <template for:each={filteredCounties} for:item="county">
+                                    <tr key={county.Id}>
+                                        <td>{county.MasterLabel}</td>
+                                        <td>
+                                            <lightning-input type="checkbox" checked={county.checked} data-type="county"
+                                                title={county.MasterLabel} label-hidden={county.MasterLabel} data-statename={county.State__r.Label}
+                                                data-stateid={county.State__c} onchange={checboxChecked}
+                                                data-id={county.Id}></lightning-input>
+                                        </td>
+                                        <td>
+                                            <lightning-input type="checkbox" data-type="county"
+                                                checked={county.isAllCitiesChecked} onchange={handleAddAllCitiesClick}
+                                                name={county.Masterlabel} data-stateid={county.State__c} data-statename={county.State__r.Label}
+                                                data-id={county.Id}></lightning-input>
+                                        </td>
+                                        <td>
+                                            <lightning-button label="view City" onclick={handleNextClickCities} data-statename={county.State__r.Label}
+                                                data-stateid={county.State__c} data-type="county" data-id={county.Id}>
+                                            </lightning-button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template>
+                        </tbody>
+                    </table>
+                    <!-- </div>
+                    </div> -->
+                </template>
+
+                <!-- CITY TABLE -->
+                <template if:true={citiestoshow}>
+                    <table
+                        class="slds-table slds-m-left_small slds-table_bordered slds-size_3-of-12 fixed-height-row enclosed-table">
+                        <thead>
+                            <tr>
+                                <th>Cities</th>
+                                <th>Is serving City</th>
+                            </tr>
+                        </thead>    
+                        <tbody>
+                            <template if:false={filteredcitiestoshow}>
+                                <template for:each={citylabel} for:item="city">
+                                    <tr key={city.Id}>
+                                            <td>{city.MasterLabel}</td>
+                                        <td>
+                                            <lightning-input type="checkbox" title={city.MasterLabel}
+                                                disable-label={city.MasterLabel} checked={city.checked} data-type="city"
+                                                onchange={checboxChecked} data-id={city.Id} data-countyname={city.County__r.MasterLabel}
+                                                data-stateid={city.County__r.State__c} data-statename={city.County__r.State__r.Label}
+                                                data-county={city.County__c}></lightning-input>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template> 
+                            <!-- CITY TABLE SEARCH -->
+                            <template if:true={filteredcitiestoshow}>
+                                <template for:each={filteredCities} for:item="city">
+                                    <tr key={city.Id}>
+                                        <td>{city.MasterLabel}</td>
+                                        <td>
+                                            <lightning-input type="checkbox" title={city.MasterLabel}
+                                                disable-label={city.MasterLabel} checked={city.checked} data-type="city"
+                                                onchange={checboxChecked} data-id={city.Id}  data-statename={city.County__r.State__r.Label}
+                                                data-stateid={city.County__r.State__c}
+                                                data-county={city.County__c}></lightning-input>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </template>
+                        </tbody>
+                    </table>
+                </template>
+            </div>
+        </template>
+    </lightning-card>
+</template>
