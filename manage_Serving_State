@@ -1,0 +1,729 @@
+import { LightningElement, wire, api, track } from 'lwc';
+import { NavigationMixin } from 'lightning/navigation';
+import createServingStateRecords from '@salesforce/apex/ServingStateCreators.createServingStateRecords';
+import { CloseActionScreenEvent } from 'lightning/actions';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+
+import getStates from '@salesforce/apex/StatesController.getStates';
+import getCountiesForState from '@salesforce/apex/StatesController.getCountiesForState';
+import getCitiesForCounty from '@salesforce/apex/StatesController.getCitiesForCounty';
+
+import getStatesRecords from '@salesforce/apex/ServingStateCreators.getStatesRecords';
+import deleteServingStateRecords from '@salesforce/apex/ServingStateCreators.deleteServingStateRecords';
+import deleteServingCountyRecords from '@salesforce/apex/ServingStateCreators.deleteServingCountyRecords';
+import updateServingCityRecords from '@salesforce/apex/ServingStateCreators.updateServingCityRecords';
+
+export default class Manage_Serving_State extends NavigationMixin(LightningElement) {
+    @api recordId;
+    // @api propertyValue;
+    @track accountId;
+    @track states = [];
+    @track selectedState;
+    @track counties;
+    @track cities;
+    @track countiestoShow = false;
+    @track countylabel =[];
+    @track citiestoshow = false;
+    @track filteredstatestoshow = false;
+    @track filteredcitiestoshow = false;
+    @track filteredcountiestoshow= false;
+
+    // @track statestoshow = false;
+    @track allCounties = false;
+    @track allCities = false;
+    servingCounties;
+    servingStates;
+    @track citylabel = [];
+    stateCheckedList = [];
+    selectedCounties = [];
+    @track filteredStates = [];
+    @track filteredCounties =[];
+    @track filteredCities = [];
+
+    accId;
+    statename;
+    countyname;
+    @track selectedData = [];
+
+    isLoading = true;
+
+    connectedCallback() {
+        // this.navigateToTab();
+        this.fetchStates();
+       // this.filteredStates = [...this.states];
+        // this.filteredCounties= [...this.countylabel];
+        // this.filteredCities= [...this.citylabel];
+
+    }
+
+    fetchStates() {
+        getStates({ attorneyId: this.recordId })
+            .then(result => {
+                // console.log(JSON.stringify(result,null,2));
+                this.states = JSON.parse(JSON.stringify(result));
+                this.fetchExistingRecords();
+            })
+            .catch(error => {
+                console.error(error);
+            });
+    }
+
+    fetchExistingRecords() {
+
+        getStatesRecords({ attorneyId: this.recordId })
+            .then(result => {
+                // this.isLoading = false;
+
+                 console.log('result 82'+JSON.stringify(result,null,2));
+
+                this.processExistingRecords(result);
+                // this.statestoshow = true;
+            })
+            .catch(error => {
+                console.error(error);
+            });
+    }
+
+    processExistingRecords(data) {
+        this.servingStates = data.servingStates || [];
+        this.servingCounties = data.servingCounties || [];
+        this.initialServingStates = JSON.parse(JSON.stringify(this.servingStates));
+        this.initialServingCounties = JSON.parse(JSON.stringify(this.servingCounties));
+        console.log('insitial Serving Counties 92 '+ JSON.stringify(this.initialServingCounties));
+    
+        this.selectedData = [];
+    
+        this.states.forEach(state => {
+            state.checked = this.servingStates.some(servingState => servingState.Name === state.Label);
+            state.isAllCountiesChecked = this.servingStates.some(servingState => servingState.Name === state.Label && servingState.All_Counties__c);
+            
+            if (state.checked) {
+                // Add the state to selectedData
+                const selectedState = {
+                    Id: state.Id,
+                    Name: state.Label,
+                    allCounties: state.isAllCountiesChecked,
+                    counties: []
+                };
+            
+                // Add counties and cities if available
+                const servingState = this.servingStates.find(servingState => servingState.Name === state.Label);
+                if (servingState && this.servingCounties.length > 0) {
+                    servingState.counties = this.servingCounties.filter(county => county.Serving_State__c === servingState.Id);
+            
+                    servingState.counties.forEach(county => {
+                        const selectedCounty = {
+                            Id: county.Id,
+                            Name: county.County__c,
+                            Serving_State: servingState.Id,
+                            State_Name: servingState.Name,
+                            allCities: county.All_Cities__c,
+                            cities: []
+                        };
+            
+                        // Add cities if available
+                        if (county.City__c) {
+                            selectedCounty.cities.push({
+                                Id: county.Id,
+                                Name: county.City__c,
+                                Serving_State: servingState.Id,
+                                State_Name: servingState.Name,
+                                County: county.Id,
+                                County_Name: county.Name
+                            });
+                        }
+                        selectedState.counties.push(selectedCounty);
+                    });
+                }
+        
+                this.selectedData.push(selectedState);
+            }
+        });
+    
+        this.isLoading = false;
+    }
+
+    handleSearch(event) {
+        const searchTerm = event.target.value.toLowerCase();
+        
+        this.filteredStates = this.states.filter(state =>
+            state.Label.toLowerCase().includes(searchTerm)
+        );
+        this.filteredCities = this.countylabel.filter(county => county.label.toLowerCase().includes(searchTerm)
+        )
+        this.filteredCities = this.citylabel.filter(city => city.Label.toLowerCase().includes(searchTerm))
+
+    }
+
+    handleStateSearch(event) {
+        const searchTerm = event.detail.value;
+        // this.filteredStates = [...this.states];
+        this.filteredstatestoshow = true;
+        if (searchTerm) {
+            this.filteredStates = this.states.filter(state =>
+                state.MasterLabel.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        } else {
+            this.filteredStates = [...this.states]; // Reset to all states if search term is empty
+        }
+    }
+   
+    // Handle County Search
+    handleCountySearch(event) {
+        const searchKey = event.detail.value.toLowerCase();
+        this.filteredcountiestoshow = true;
+        if (searchKey) {
+            this.filteredCounties = this.countylabel.filter(county =>
+                county.MasterLabel.toLowerCase().includes(searchKey)
+            );
+        } else {
+            this.filteredCounties = [...this.countylabel]; // Reset to all counties if search term is empty
+        }
+    }
+    
+    // Handle City Search
+    handleCitySearch(event) {
+        const searchKey = event.detail.value.toLowerCase();
+        this.filteredcitiestoshow = true;
+        if (searchKey) {
+            this.filteredCities = this.citylabel.filter(city =>
+                city.MasterLabel.toLowerCase().includes(searchKey)
+            );
+        } else {
+            this.filteredCities = [...this.citylabel]; // Reset to all cities if search term is empty
+        }
+    }
+
+    handleCountyView(event) {
+        const selectedRecordId = event.currentTarget.dataset.id;
+        const selectedDataLocal = JSON.parse(JSON.stringify(this.selectedData));
+
+        let stateObj = this.states.find(s => s.Id == selectedRecordId);
+
+        if (stateObj) {
+            let index = selectedDataLocal.findIndex(item => item.Id == selectedRecordId);
+            if (index == -1) {
+                getCounties({ developerName: selectedRecordId })
+                    .then(result => {
+                        if (result) {
+                            result.forEach(r => r.Serving_State__c = stateObj.Id);
+                            stateObj.counties = result;
+                            this.selectedData.push(stateObj);
+                        } else {
+                            console.error('No data returned from the server.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error retrieving counties:', error);
+                    });
+            } else {
+                console.error('No County developer name found.');
+            }
+        } else {
+            let index = selectedDataLocal.findIndex(item => item.Id == selectedRecordId);
+            if (index !== -1) {
+                selectedDataLocal.splice(index, 1);
+            }
+            this.selectedData = JSON.parse(JSON.stringify(selectedDataLocal));
+        }
+    }
+
+    navigateToTab() {
+        // Prepare the component definition with the propertyValue to pass
+        var compDefinition = {
+            componentDef: "c:targetLwcComponent",
+            attributes: {
+                propertyValue: this.recordId
+            }
+        };
+
+        // Base64 encode the compDefinition JS object
+        var encodedCompDef = btoa(JSON.stringify(compDefinition));
+
+        // Generate the URL for the navigation item page
+        this[NavigationMixin.GenerateUrl]({
+            type: 'standard__navItemPage',
+            attributes: {
+                apiName: 'Manage_Serving_State', // Replace with the API name of your LWC tab
+            },
+            state: {
+                c__encodedCompDef: encodedCompDef // Pass the encoded component definition as a state parameter
+            }
+        })
+            .then(url => {
+                let completeURL = window.location.origin + url;
+                console.log('recordID: ' + this.recordId);
+                console.log('Opening URL:', completeURL);
+                window.open(completeURL, '_blank'); // Open in new tab
+                this.closeQuickAction();
+            })
+            .catch(error => {
+                console.error('Error generating URL', error);
+            });
+    }
+
+    closeQuickAction() {
+        this.dispatchEvent(new CloseActionScreenEvent());
+    }
+
+    handleNextClick(event) {
+        // console.log('EVENT'+ JSON.parse(JSON.stringify(event)));
+        console.log('recorddddId' + this.recordId);
+        const state = event.target.dataset.id;
+        console.log('Next button clicked for state:', state);
+        this.selectedState += state;
+
+        if (state) {
+            
+            getCountiesForState({ stateId: state })
+                .then(result => {
+                    if (result) {
+
+
+                        // Map the result array to extract MasterLabel from each county
+                        this.counties = result.map(county => county.MasterLabel);
+                        this.countylabel =  JSON.parse(JSON.stringify(result));
+console.log('countylabel'+ JSON.stringify(this.countylabel));
+                        // Ensure this.countylabel is an array
+        // this.countylabel = this.countylabel || [];
+
+        // Mark the existing counties
+        this.countylabel.forEach(county => {
+            county.checked = this.servingCounties.some(servingCounties => servingCounties.County__c === county.MasterLabel);
+            county.isAllCitiesChecked = this.servingCounties.some(servingCounties => servingCounties.County__c === county.MasterLabel && servingCounties.All_Cities__c)
+            console.log('county.checked'+county.checked);
+            console.log('isAllCitiesChecked   ' + county.isAllCitiesChecked);
+        });
+        this.countiestoShow = true;
+                    } else {
+                        console.error('No data returned from the server.');
+                    }
+
+                    console.log('Counties for state:', this.counties);
+                })
+                .catch(error => {
+                    console.error('Error retrieving counties:', error);
+                });
+        } else {
+            console.error('No County developer name found.');
+        }
+    }
+
+    handleNextClickCities(event) {
+        const county = event.target.dataset.id;
+        console.log('Next button clicked for county:', county);
+
+        if (county) {
+
+            getCitiesForCounty({ countyIds: county })
+                .then(result => {
+                    if (result) {
+                        console.log('result' + JSON.stringify(result));
+                        this.cities = result.map(city => city.MasterLabel);
+                        this.citylabel = JSON.parse(JSON.stringify(result));
+
+
+                        //To mark existing records of counties 
+                        this.citylabel.forEach(city => {
+                            city.checked = this.servingCounties.some(servingCounties => servingCounties.City__c === city.MasterLabel);
+                            console.log('city.checked' + city.checked);
+                        });
+                        this.citiestoshow = true;
+                    } else {
+                        console.error('No data returned from the server.');
+                    }
+
+                    console.log('Cities for county:', this.cities);
+
+                    console.log('Cities for county22:', JSON.stringify(this.citylabel));
+                })
+                .catch(error => {
+                    console.error('Error retrieving cities:', error);
+                });
+        } else {
+            console.error('No county developer name found.');
+        }
+    }
+
+
+    handleAddAllCitiesClick(event) {
+        const checked = event.target.checked;
+        let selectCountyId = event.target.dataset.id;
+        let selectStateId = event.target.dataset.stateid;
+        let selectStateName = event.target.dataset.statename;
+         this.countyName = event.target.title;
+        let selectDataType = event.target.dataset.type;
+        this.allCities = checked;
+        console.log('selectcountyID'+selectCountyId );
+        console.log('selectStateId'+selectStateId );
+        console.log('countyName: ' + this.countyName);
+        console.log('allCities'+this.allCities );
+        console.log('selectDataType'+selectDataType);
+        console.log('selectStateName'+selectStateName);
+    
+        this.selectedData = this.selectedData.map(state => {
+            if (state.Id === selectStateId) {
+                return {
+                    ...state,
+                    counties: state.counties.map(county => {
+                        if (county.Id === selectCountyId) {
+                            return {
+                                ...county,
+                                allCities: this.allCities
+                               
+                            };
+                        }
+                        return county;
+                    })
+                };
+            }
+            return state;
+        });
+    
+        console.log('Updated selectedData:', JSON.stringify(this.selectedData));
+        this.checboxChecked(event);
+    }
+    
+
+    handleAddAllClick(event) {
+        console.log('eventttttt' + JSON.stringify(event.target.dataset));
+        const checked = event.target.dataset.id;
+        console.log('checked clicked' + checked);
+        let selectFieldType = event.target.dataset.type;
+        console.log('selectedfieldType' + selectFieldType);
+        this.statename = event.target.dataset.name;
+        console.log('state' + this.statename);
+        this.allCounties = event.target.checked;
+        console.log('allcounties checked' + this.allCounties);
+    
+        if (checked) {
+            // Update allCounties for the relevant state in selectedData
+            let stateExists = false;
+            this.selectedData = this.selectedData.map(data => {
+                if (data.Name === this.statename) {
+                    stateExists = true;
+                    return {
+                        ...data,
+                        allCounties: this.allCounties
+                    };
+                }
+                return data;
+            });
+    
+            if (!stateExists) {
+                this.checboxChecked(event); // Add new state if not existing
+            }
+        } else {
+            console.log('error');
+        }
+    
+        console.log('Updated selectedData:', JSON.stringify(this.selectedData));
+        console.log('Updated states:', JSON.stringify(this.states));
+    
+        let selectedDataLocal = JSON.parse(JSON.stringify(this.selectedData));
+        console.log('OUTPUT selectedDataLocal : ', JSON.stringify(selectedDataLocal));
+        console.log('dataset -> ', JSON.stringify(event.target.dataset));
+    }
+    
+
+    handleSubmit() {
+        const statesToDelete = [];
+        const countiesToDelete = [];
+        const citiesToUpdate = [];
+    
+        // Identify removed states
+        this.initialServingStates.forEach(servingState => {
+            const isStateRemoved = !this.selectedData.some(selectedState => selectedState.Name === servingState.Name);
+            if (isStateRemoved) {
+                statesToDelete.push(servingState);
+            }
+        });
+    
+        // Identify removed or updated counties and cities
+        this.initialServingCounties.forEach(servingCounty => {
+            const selectedState = this.selectedData.find(selectedState => selectedState.counties[0].State_Name === servingCounty.Serving_State__r.Name
+            );
+            // console.log('selecteddata 446 '+ JSON.stringify(this.selectedData));
+            // console.log('selectedState 447 '+ JSON.stringify(selectedState));
+            // console.log('selectedState 4422 '+ JSON.stringify(selectedState.Id));
+            // console.log('servingCounty 449 '+ (servingCounty.Name));
+            if (selectedState) {
+                
+                const isCountyRemoved = !selectedState.counties.some(selectedCounty => selectedCounty.Name === servingCounty.County__c);
+                console.log('CountyRemoved  444 '+ isCountyRemoved);
+                if (isCountyRemoved) {
+                    countiesToDelete.push(servingCounty);
+
+                } 
+                else {
+                    // const selectedCounty = selectedState.counties.find(selectedCounty => selectedCounty.Name === servingCounty.County__c);
+                    const isCityRemoved =  this.initialServingCounties.some(selectedCity => selectedCity.City__c === servingCounty.City__c);
+                    console.log('selectedCounty '+ JSON.stringify(servingCounty));
+                    console.log('iscity removed '+ isCityRemoved);
+                    if (isCityRemoved) {
+                        citiesToUpdate.push(servingCounty);
+                    }
+                }
+            }
+        });
+    console.log('states to delete ' + JSON.stringify(statesToDelete));
+    console.log('counties To delete ' + JSON.stringify(countiesToDelete));
+    console.log('cities to remove 472 '+ JSON.stringify(citiesToUpdate));
+        // Call Apex methods to delete or update records
+        Promise.all([
+            deleteServingStateRecords({ states: JSON.stringify(statesToDelete) }),
+            deleteServingCountyRecords({ counties: JSON.stringify(countiesToDelete) }),
+            updateServingCityRecords({ cities: JSON.stringify(citiesToUpdate) })
+        ])
+        .then(() => {
+            // Proceed with creating new records
+            createServingStateRecords({
+                attorneyId: this.recordId,
+                selectedData: JSON.stringify(this.selectedData)
+            })
+            .then(() => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: 'Serving State records created successfully',
+                        variant: 'success',
+                    }),
+                );
+            })
+            .catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error creating records',
+                        message: error.body.message,
+                        variant: 'error',
+                    }),
+                );
+            });
+        })
+        .catch(error => {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Error updating records',
+                    message: error.body.message,
+                    variant: 'error',
+                }),
+            );
+        });
+    }
+    
+    //For all fields type
+    checboxChecked(event) {
+        let selectedFieldName = event.target.title || this.statename || this.countyname;
+        let selectedRecordId = event.target.dataset.id;
+        let selectFieldType = event.target.dataset.type;
+        const checked = event.target.checked;
+    
+        let selectedDataLocal = JSON.parse(JSON.stringify(this.selectedData));
+        console.log('OUTPUT selectedDataLocal : ', JSON.stringify(selectedDataLocal));
+        console.log('dataset -> ', JSON.stringify(event.target.dataset));
+    
+        let stateObj = {};
+    
+        if (selectFieldType === 'state') {
+            const stateIndex = selectedDataLocal.findIndex(data => data.Name === selectedFieldName);
+            if (checked === true) {
+                if (stateIndex !== -1) {
+                    selectedDataLocal[stateIndex] = {
+                        ...selectedDataLocal[stateIndex],
+                        Id: selectedRecordId,
+                        Name: selectedFieldName,
+                        allCounties: this.allCounties
+                    };
+                } else {
+                    stateObj.Id = selectedRecordId;
+                    stateObj.Name = selectedFieldName;
+                    stateObj.allCounties = this.allCounties;
+                    selectedDataLocal.push(stateObj);
+                }
+    
+                if (stateObj.Name) {
+                    console.log('stateObj.Id' + stateObj.Id);
+                    getCountiesForState({ stateId: stateObj.Id })
+                        .then(result => {
+                            if (result) {
+                                this.counties = result.map(county => county.MasterLabel);
+                                this.countylabel = result;
+    
+                                this.countylabel.forEach(county => {
+                                    county.checked = this.servingCounties.some(servingCounties => servingCounties.County__c === county.MasterLabel);
+                                    county.isAllCitiesChecked = this.servingCounties.some(servingCounties => servingCounties.County__c === county.MasterLabel && servingCounties.All_Cities__c);
+                                });
+                            } else {
+                                console.error('No data returned from the server.');
+                            }
+                            console.log('Counties for state:', this.counties);
+                        })
+                        .catch(error => {
+                            console.error('Error retrieving counties:', error);
+                        });
+                } else {
+                    console.error('No County developer name found.');
+                }
+            } else {
+                if (stateIndex !== -1) {
+                    selectedDataLocal.splice(stateIndex, 1);
+                }
+            }
+        } else if (selectFieldType === 'county') {
+            let selectStateId = event.target.dataset.stateid;
+            let selectedStateName = event.target.dataset.statename;
+            console.log('OUTPUT selectStateId : ', selectStateId);
+            console.log('OUTPUT selectedStateName  County: ', selectedStateName);
+    
+            const index = selectedDataLocal.findIndex(state => state.Id === selectStateId);
+            if (index !== -1) {
+                stateObj = selectedDataLocal[index];
+            }
+    
+            let counties = stateObj.counties || [];
+    
+            if (checked === true) {
+                let countyObj = {
+                    Id: selectedRecordId,
+                    Name: selectedFieldName,
+                    Serving_State: selectStateId,
+                    Serving_State_Name: selectedStateName,
+                    County_Name: selectedFieldName,
+                    allCities: this.allCities
+                };
+                console.log('allCities' + countyObj.allCities);
+    
+                counties = counties.filter(county => county.Name !== selectedFieldName);
+                counties.push(countyObj);
+    
+                if (countyObj.Id) {
+                    console.log('countyObj.Id' + countyObj.Id);
+                    getCitiesForCounty({ countyIds: countyObj.Id })
+                        .then(result => {
+                            if (result) {
+                                console.log('result' + JSON.stringify(result));
+                                this.cities = result.map(city => city.MasterLabel);
+                                this.citylabel = result;
+                            } else {
+                                console.error('No data returned from the server.');
+                            }
+                            console.log('Cities for county:', this.cities);
+                        })
+                        .catch(error => {
+                            console.error('Error retrieving cities:', error);
+                        });
+                } else {
+                    console.error('No county developer name found.');
+                }
+            } else {
+                const countyIndex = counties.findIndex(county => county.Id === selectedRecordId);
+                if (countyIndex !== -1) {
+                    let countyObj = counties[countyIndex];
+    
+                    if (countyObj.cities && countyObj.cities.length > 0) {
+                        countyObj.cities.forEach(citys => {
+                            const cityIndex = countyObj.cities.findIndex(city => city.Id === citys.Id);
+                            if (cityIndex !== -1) {
+                                countyObj.cities.splice(cityIndex, 1);
+                            }
+                        });
+                    }
+    
+                    counties.splice(countyIndex, 1);
+                    stateObj.counties = counties;
+                    selectedDataLocal[index] = stateObj;
+                }
+            }
+    
+            stateObj.counties = counties;
+            selectedDataLocal[index] = stateObj;
+        } else {
+            let selectStateId = event.target.dataset.stateid;
+            let selectedStateName = event.target.dataset.statename;
+            let selectCountyName = event.target.dataset.countyname;
+            let countyObj = {};
+    console.log('SelectedStateName  646' + selectedStateName);
+    console.log('selectStateId  647' + selectStateId);
+            const index = selectedDataLocal.findIndex(state => state.Id === selectStateId);
+            if (index !== -1) {
+                stateObj = selectedDataLocal[index];
+            }
+    
+            let counties = stateObj.counties || [];
+    
+            const countyIndex = counties.findIndex(county => county.Name === selectCountyName);
+            if (countyIndex !== -1) {
+                countyObj = counties[countyIndex];
+            }
+            console.log('event.target.dagtaset ' + JSON.stringify(event.target.dataset));
+            console.log('selectedCOnty ID 659 ' + selectCountyName);
+            console.log('counties 659 '+ JSON.stringify(counties));
+            console.log('countyIndex 660 '+ countyIndex);
+            console.log(' selectedRecordID 661 '+ selectedRecordId);
+    
+            let cities = countyObj.cities || [];
+    
+            if (checked === true) {
+                if (this.allCities == false) {
+                    let cityObj = {
+                        Id: selectedRecordId,
+                        Name: selectedFieldName,
+                        Serving_State: selectStateId,
+                        Serving_State_Name: selectedStateName,
+                        County: countyObj.Id
+                    };
+                    console.log('Id' + cityObj.Id);
+                    console.log('Name' + cityObj.Name);
+                    console.log('Serving_State' + cityObj.Serving_State);
+                    console.log('County' + cityObj.County);
+    
+                    cities = cities.filter(city => city.Name !== selectedFieldName);
+                    cities.push(cityObj);
+                } else {
+                    const cityIndex = cities.findIndex(city => city.Id === selectedRecordId);
+                    if (cityIndex !== -1) {
+                        cities.splice(cityIndex, 1);
+                    }
+                }
+            } else {
+                const cityIndex = cities.findIndex(city => city.Id === selectedRecordId);
+                if (cityIndex !== -1) {
+                    cities.splice(cityIndex, 1);
+                }
+            }
+    
+            countyObj.cities = cities;
+            counties[countyIndex] = countyObj;
+            stateObj.counties = counties;
+            selectedDataLocal[index] = stateObj;
+        }
+    
+        console.log('selectedDataLocal -> ', selectedDataLocal);
+        this.selectedData = JSON.parse(JSON.stringify(selectedDataLocal));
+    }
+    
+
+    handleRefresh() {
+        console.log('Refresh clicked');
+        // Clear all the state variables
+        // this.states = [];
+        this.selectedState = null;
+        this.counties = [];
+        this.cities = [];
+        this.countiestoShow = false;    
+        this.countylabel = [];
+        this.citiestoshow = false;
+        this.citylabel = [];
+        this.stateCheckedList = [];
+        this.selectedCounties = [];
+        this.selectedData = [];
+        window.location.reload()
+
+
+        // Refresh the wired getStates method
+        // return refreshApex(this.wiredStates);
+    }
+   
+
+
+}
